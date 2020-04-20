@@ -208,7 +208,7 @@ void runTest(int argc, char **argv, int index) {
 
 	//Step 2 & 3: RUN
 	cudaEventRecord(startCalc);
-	testGrayScale<<< nBlocks, BLOCKSIZE >>> (r_dev,g_dev,b,_deb,ARRAYSIZE);
+	testGrayScale<<< nBlocks, BLOCKSIZE >>> (r_dev,g_dev,b,_dev,ARRAYSIZE);
 	cudaEventRecord(stopCalc);
 	cudaEventSynchronize(stopCalc);
 

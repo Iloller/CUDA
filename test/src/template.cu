@@ -34,16 +34,18 @@
 // declaration, forward
 void runTest(int argc, char **argv, int index);
 
-#define ARRAYSIZE 10000000
 #define COUNT 1
 int BLOCKSIZE = 1;
 
-extern "C" void computeSwap(int* in, int* out, int length);
+extern "C" void computeGrayScale(char* r, char* g, char* b, unsigned int ARRAYSIZE);
 
-__global__ void testSwap(int* in, int* out) {
+__global__ void testGrayScale(char* r, char* g, char* b, unsigned int ARRAYSIZE) {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx < ARRAYSIZE) {
-		out[ARRAYSIZE - 1 - idx] = in[idx];
+		float tmp = 0.2126 * r[idx] / 255 + 0.7152 * g[idx] / 255 + 0.0722 * b[idx] / 255;
+		r[idx] = 255 * tmp;
+		g[idx] = 255 * tmp;
+		b[idx] = 255 * tmp;
 	}
 }
 
@@ -108,53 +110,43 @@ void decodeOneStep(const char* filename) {
 	free(image);
 }
 
-void transform() {
-	for (int y = 0; y < height; y++) {
-		for (int x = 0; x < width; x++) {
-			/*get RGBA components*/
-			float tmp = 0.2126 * r[y * width + x]/255 + 0.7152 * g[y * width + x]/255 + 0.0722 * b[y * width + x]/255;
-			r[y * width + x] = 255* tmp;
-			g[y * width + x] = 255* tmp;
-			b[y * width + x] = 255* tmp;
-		}
-	}
-}
-
 int main(int argc, char **argv) {
 	const char* filename = argc > 1 ? argv[1] : "image.png";
 
 	decodeOneStep(filename);
-	transform();
-	// DO TRANSFORM SHENANIGANS
+	
+
+	FILE* file;
+	char* str = (char*) malloc(50);
+	snprintf(str,50,"opgave-3.csv");
+	file = fopen(str,"w");
+	free(str);
+
+	fprintf(file,"BLOCKSIZE;CPU_TIME;GPU_CALCULATION;GPU_TOTAL\n");
+	while (BLOCKSIZE <= 1) {
+		float cpuAvg = 0;
+		float gpuCalcAvg = 0;
+		float gpuTotalAvg = 0;
+		for (int i = 0; i < COUNT; i++) {
+			runTest(argc, argv, i);
+			cpuAvg += cpuResults[i];
+			gpuCalcAvg += gpuCalcResults[i];
+			gpuTotalAvg += gpuTotalResults[i];
+		}
+
+		cpuAvg = cpuAvg / COUNT;
+		gpuCalcAvg = gpuCalcAvg / COUNT;
+		gpuTotalAvg = gpuTotalAvg / COUNT;
+		fprintf(file,"%i;%f;%f;%f\n", BLOCKSIZE, cpuAvg, gpuCalcAvg, gpuTotalAvg);
+		printf("%i;%f;%f;%f\n", BLOCKSIZE, cpuAvg, gpuCalcAvg, gpuTotalAvg);
+		BLOCKSIZE++;
+	}
+
 	encodeOneStep("grayscale.png");
+
+	fclose(file);
+
 	return 0;
-//	FILE* file;
-//	char* str = (char*) malloc(50);
-//	snprintf(str,50,"opgave-2-%d.csv",ARRAYSIZE);
-//	file = fopen(str,"w");
-//	free(str);
-//
-//	fprintf(file,"BLOCKSIZE;CPU_TIME;GPU_CALCULATION;GPU_TOTAL\n");
-//	while (BLOCKSIZE <= 1024) {
-//		float cpuAvg = 0;
-//		float gpuCalcAvg = 0;
-//		float gpuTotalAvg = 0;
-//		for (int i = 0; i < COUNT; i++) {
-//			runTest(argc, argv, i);
-//			cpuAvg += cpuResults[i];
-//			gpuCalcAvg += gpuCalcResults[i];
-//			gpuTotalAvg += gpuTotalResults[i];
-//		}
-//
-//		cpuAvg = cpuAvg / COUNT;
-//		gpuCalcAvg = gpuCalcAvg / COUNT;
-//		gpuTotalAvg = gpuTotalAvg / COUNT;
-//		fprintf(file,"%i;%f;%f;%f\n", BLOCKSIZE, cpuAvg, gpuCalcAvg, gpuTotalAvg);
-//		printf("%i;%f;%f;%f\n", BLOCKSIZE, cpuAvg, gpuCalcAvg, gpuTotalAvg);
-//		BLOCKSIZE++;
-//	}
-//
-//	fclose(file);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -169,17 +161,22 @@ void runTest(int argc, char **argv, int index) {
 	dim3 grid(1, 1, 1);
 	dim3 threads(num_threads, 1, 1);
 
+	unsigned int ARRAYSIZE = height * width;
+
 	//BLOCKSIZE en nBlocks
 	int nBlocks = ARRAYSIZE / BLOCKSIZE + (ARRAYSIZE % BLOCKSIZE == 0 ? 0 : 1);
 	//declare variables
-	int *in_host, *out_host;
-	int *in_dev, *out_dev;
+	unsigned char *r_host, *g_host, *b_host;
+	unsigned char *r_dev, *g_dev, *b_dev;
 	//allocate arrays on host
-	in_host = (int *) malloc(ARRAYSIZE * sizeof(int));
-	out_host = (int *) malloc(ARRAYSIZE * sizeof(int));
+	r_host = (unsigned char *) malloc(ARRAYSIZE * sizeof(unsigned char));
+	g_host = (unsigned char *) malloc(ARRAYSIZE * sizeof(unsigned char));
+	b_host = (unsigned char *) malloc(ARRAYSIZE * sizeof(unsigned char));
 
 	for (unsigned int i = 0; i < ARRAYSIZE; i++) {
-		in_host[i] = i;
+		r_host[i] = r[i]:
+		g_host[i] = g[i]:
+		b_host[i] = b[i];
 	}
 
 	StopWatchInterface *timerCPU = 0;
@@ -196,19 +193,22 @@ void runTest(int argc, char **argv, int index) {
 	cudaEventRecord(startTotal);
 
 	//allocate arrays on device
-	cudaMalloc((void **) &in_dev, ARRAYSIZE * sizeof(int));
-	cudaMalloc((void **) &out_dev, ARRAYSIZE * sizeof(int));
+	cudaMalloc((void **) &r_dev, ARRAYSIZE * sizeof(unsigned char));
+	cudaMalloc((void **) &g_dev, ARRAYSIZE * sizeof(unsigned char));
+	cudaMalloc((void **) &b_dev, ARRAYSIZE * sizeof(unsigned char));
 
 	//Step 1: Copy data to GPU memory
 
-	cudaMemcpy(in_dev, in_host, ARRAYSIZE * sizeof(int),
+	cudaMemcpy(r_dev, r_host, ARRAYSIZE * sizeof(unsigned char),
 			cudaMemcpyHostToDevice);
-	cudaMemcpy(out_dev, out_host, ARRAYSIZE * sizeof(int),
+	cudaMemcpy(g_dev, g_host, ARRAYSIZE * sizeof(unsigned char),
+			cudaMemcpyHostToDevice);
+	cudaMemcpy(b_dev, b_host, ARRAYSIZE * sizeof(unsigned char),
 			cudaMemcpyHostToDevice);
 
 	//Step 2 & 3: RUN
 	cudaEventRecord(startCalc);
-	testSwap<<< nBlocks, BLOCKSIZE >>> (in_dev, out_dev);
+	testGrayScale<<< nBlocks, BLOCKSIZE >>> (r_dev,g_dev,b,_dev,ARRAYSIZE);
 	cudaEventRecord(stopCalc);
 	cudaEventSynchronize(stopCalc);
 
@@ -216,9 +216,11 @@ void runTest(int argc, char **argv, int index) {
 	getLastCudaError("Kernel execution failed");
 
 	//Step 4: Retrieve result
-	cudaMemcpy(in_host, in_dev, ARRAYSIZE * sizeof(int),
+	cudaMemcpy(r_host, r_dev, ARRAYSIZE * sizeof(unsigned char),
 			cudaMemcpyDeviceToHost);
-	cudaMemcpy(out_host, out_dev, ARRAYSIZE * sizeof(int),
+	cudaMemcpy(g_host, g_dev, ARRAYSIZE * sizeof(unsigned char),
+			cudaMemcpyDeviceToHost);
+	cudaMemcpy(b_host, b_dev, ARRAYSIZE * sizeof(unsigned char),
 			cudaMemcpyDeviceToHost);
 
 	cudaEventRecord(stopTotal);
@@ -226,11 +228,17 @@ void runTest(int argc, char **argv, int index) {
 	cudaEventElapsedTime(&timeCalc, startCalc, stopCalc);
 	cudaEventElapsedTime(&timeTotal, startTotal, stopTotal);
 
+	// for (unsigned int i = 0; i < ARRAYSIZE; i++) {
+	// 	r_host[i] = r[i]:
+	// 	g_host[i] = g[i]:
+	// 	b_host[i] = b[i];
+	// }
+
 	//printf("Starting CPU...\n");
 
 	sdkStartTimer(&timerCPU);
 
-	computeSwap(in_host, out_host, ARRAYSIZE);
+	//computeGrayScale(r_host,g_host,b_host,ARRAYSIZE);
 
 	sdkStopTimer(&timerCPU);
 
@@ -239,12 +247,21 @@ void runTest(int argc, char **argv, int index) {
 	gpuCalcResults[index] = timeCalc;
 	gpuTotalResults[index] = timeTotal;
 
+
+	for (unsigned int i = 0; i < ARRAYSIZE; i++) {
+		r[i] = r_host[i]:
+		g[i] = g_host[i]:
+		b[i] = b_host[i];
+	}
+
 //rest of program (Other 4 steps go here)
 //end of  program
 //cleanup: VERY IMPORTANT!!!
 	sdkDeleteTimer(&timerCPU);
-	free(in_host);
-	free(out_host);
-	cudaFree(in_dev);
-	cudaFree(out_dev);
+	free(r_host);
+	free(g_host);
+	free(b_host);
+	cudaFree(r_dev);
+	cudaFree(g_dev);
+	cudaFree(b_dev);
 }
