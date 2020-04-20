@@ -37,9 +37,9 @@ void runTest(int argc, char **argv, int index);
 #define COUNT 1
 int BLOCKSIZE = 1;
 
-extern "C" void computeGrayScale(char* r, char* g, char* b, unsigned int ARRAYSIZE);
+extern "C" void computeGrayScale(unsigned char* r, unsigned char* g, unsigned char* b, unsigned int ARRAYSIZE);
 
-__global__ void testGrayScale(char* r, char* g, char* b, unsigned int ARRAYSIZE) {
+__global__ void testGrayScale(unsigned char* r, unsigned char* g, unsigned char* b, unsigned int ARRAYSIZE) {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx < ARRAYSIZE) {
 		float tmp = 0.2126 * r[idx] / 255 + 0.7152 * g[idx] / 255 + 0.0722 * b[idx] / 255;
@@ -123,7 +123,7 @@ int main(int argc, char **argv) {
 	free(str);
 
 	fprintf(file,"BLOCKSIZE;CPU_TIME;GPU_CALCULATION;GPU_TOTAL\n");
-	while (BLOCKSIZE <= 1) {
+	while (BLOCKSIZE <= 1024) {
 		float cpuAvg = 0;
 		float gpuCalcAvg = 0;
 		float gpuTotalAvg = 0;
@@ -142,7 +142,11 @@ int main(int argc, char **argv) {
 		BLOCKSIZE++;
 	}
 
-	encodeOneStep("grayscale.png");
+	//encodeOneStep("grayscale.png");
+	free(r);
+	free(g);
+	free(b);
+	free(a);
 
 	fclose(file);
 
@@ -174,8 +178,8 @@ void runTest(int argc, char **argv, int index) {
 	b_host = (unsigned char *) malloc(ARRAYSIZE * sizeof(unsigned char));
 
 	for (unsigned int i = 0; i < ARRAYSIZE; i++) {
-		r_host[i] = r[i]:
-		g_host[i] = g[i]:
+		r_host[i] = r[i];
+		g_host[i] = g[i];
 		b_host[i] = b[i];
 	}
 
@@ -208,7 +212,7 @@ void runTest(int argc, char **argv, int index) {
 
 	//Step 2 & 3: RUN
 	cudaEventRecord(startCalc);
-	testGrayScale<<< nBlocks, BLOCKSIZE >>> (r_dev,g_dev,b,_dev,ARRAYSIZE);
+	testGrayScale<<< nBlocks, BLOCKSIZE >>> (r_dev,g_dev,b_dev,ARRAYSIZE);
 	cudaEventRecord(stopCalc);
 	cudaEventSynchronize(stopCalc);
 
@@ -228,17 +232,17 @@ void runTest(int argc, char **argv, int index) {
 	cudaEventElapsedTime(&timeCalc, startCalc, stopCalc);
 	cudaEventElapsedTime(&timeTotal, startTotal, stopTotal);
 
-	// for (unsigned int i = 0; i < ARRAYSIZE; i++) {
-	// 	r_host[i] = r[i]:
-	// 	g_host[i] = g[i]:
-	// 	b_host[i] = b[i];
-	// }
+	for (unsigned int i = 0; i < ARRAYSIZE; i++) {
+		r_host[i] = r[i];
+		g_host[i] = g[i];
+	 	b_host[i] = b[i];
+	}
 
 	//printf("Starting CPU...\n");
 
 	sdkStartTimer(&timerCPU);
 
-	//computeGrayScale(r_host,g_host,b_host,ARRAYSIZE);
+	computeGrayScale(r_host,g_host,b_host,ARRAYSIZE);
 
 	sdkStopTimer(&timerCPU);
 
@@ -246,13 +250,6 @@ void runTest(int argc, char **argv, int index) {
 	cpuResults[index] = sdkGetTimerValue(&timerCPU);
 	gpuCalcResults[index] = timeCalc;
 	gpuTotalResults[index] = timeTotal;
-
-
-	for (unsigned int i = 0; i < ARRAYSIZE; i++) {
-		r[i] = r_host[i]:
-		g[i] = g_host[i]:
-		b[i] = b_host[i];
-	}
 
 //rest of program (Other 4 steps go here)
 //end of  program

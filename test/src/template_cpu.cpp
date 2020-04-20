@@ -11,9 +11,9 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 // export C interface
-extern "C" void computeGrayScale(char *r, char *g, char *b, unsigned int ARRAYSIZE);
+extern "C" void computeGrayScale(unsigned char *r, unsigned char *g, unsigned char *b, unsigned int ARRAYSIZE);
 
-void computeGrayScale(char *r, char *g, char *b, unsigned int ARRAYSIZE)
+void computeGrayScale(unsigned char *r, unsigned char *g, unsigned char *b, unsigned int ARRAYSIZE)
 {
 	for (unsigned int i = 0; i < ARRAYSIZE; i++)
 	{
@@ -24,4 +24,4 @@ void computeGrayScale(char *r, char *g, char *b, unsigned int ARRAYSIZE)
 		b[i] = 255 * tmp;
 	}
 }
-}
+
