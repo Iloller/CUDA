@@ -15,7 +15,7 @@
  * Host code.
  */
 
-// includes, system
+ // includes, system
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -32,20 +32,18 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 // declaration, forward
-void runTest(int argc, char **argv, int index);
+void runTest(int argc, char** argv, int index);
 
-#define COUNT 1
+#define COUNT 10
 int BLOCKSIZE = 1;
 
-extern "C" void computeGrayScale(unsigned char* r, unsigned char* g, unsigned char* b, unsigned int ARRAYSIZE);
+extern "C" void computeGrayScale(unsigned char* r, unsigned char* g, unsigned char* b, unsigned char* out, unsigned int ARRAYSIZE);
 
-__global__ void testGrayScale(unsigned char* r, unsigned char* g, unsigned char* b, unsigned int ARRAYSIZE) {
+__global__ void testGrayScale(unsigned char* r, unsigned char* g, unsigned char* b, unsigned char* out, unsigned int ARRAYSIZE) {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	if (idx < ARRAYSIZE) {
 		float tmp = 0.2126 * r[idx] / 255 + 0.7152 * g[idx] / 255 + 0.0722 * b[idx] / 255;
-		r[idx] = 255 * tmp;
-		g[idx] = 255 * tmp;
-		b[idx] = 255 * tmp;
+		out[idx] = 255 * tmp;
 	}
 }
 
@@ -54,20 +52,20 @@ float gpuCalcResults[COUNT];
 float gpuTotalResults[COUNT];
 
 unsigned height, width;
-unsigned char *r, *g, *b, *a;
+unsigned char* r, * g, * b, * a, * out;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Program main
 ////////////////////////////////////////////////////////////////////////////////
 void encodeOneStep(const char* filename) {
 	/*Encode the image*/
-	unsigned char* image = (unsigned char*) malloc(4 * width * height * sizeof(unsigned char));
+	unsigned char* image = (unsigned char*)malloc(4 * width * height * sizeof(unsigned char));
 	for (int y = 0; y < height; y++) {
 		for (int x = 0; x < width; x++) {
 			/*get RGBA components*/
-			image[4 * y * width + 4 * x + 0] = r[y * width + x]; /*red*/
-			image[4 * y * width + 4 * x + 1] = g[y * width + x]; /*green*/
-			image[4 * y * width + 4 * x + 2] = b[y * width + x]; /*blue*/
+			image[4 * y * width + 4 * x + 0] = out[y * width + x]; /*red*/
+			image[4 * y * width + 4 * x + 1] = out[y * width + x]; /*green*/
+			image[4 * y * width + 4 * x + 2] = out[y * width + x]; /*blue*/
 			image[4 * y * width + 4 * x + 3] = a[y * width + x]; /*alpha*/
 		}
 	}
@@ -93,10 +91,10 @@ void decodeOneStep(const char* filename) {
 	if (error)
 		printf("error %u: %s\n", error, lodepng_error_text(error));
 
-	r = (unsigned char*) malloc(width * height * sizeof(unsigned char));
-	g = (unsigned char*) malloc(width * height * sizeof(unsigned char));
-	b = (unsigned char*) malloc(width * height * sizeof(unsigned char));
-	a = (unsigned char*) malloc(width * height * sizeof(unsigned char));
+	r = (unsigned char*)malloc(width * height * sizeof(unsigned char));
+	g = (unsigned char*)malloc(width * height * sizeof(unsigned char));
+	b = (unsigned char*)malloc(width * height * sizeof(unsigned char));
+	a = (unsigned char*)malloc(width * height * sizeof(unsigned char));
 
 	for (int y = 0; y < height; y++) {
 		for (int x = 0; x < width; x++) {
@@ -110,19 +108,20 @@ void decodeOneStep(const char* filename) {
 	free(image);
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
 	const char* filename = argc > 1 ? argv[1] : "image.png";
 
 	decodeOneStep(filename);
-	
+
+	out = (unsigned char*)malloc(width * height * sizeof(unsigned char));
 
 	FILE* file;
-	char* str = (char*) malloc(50);
-	snprintf(str,50,"opgave-3.csv");
-	file = fopen(str,"w");
+	char* str = (char*)malloc(50);
+	snprintf(str, 50, "opgave-3.csv");
+	file = fopen(str, "w");
 	free(str);
 
-	fprintf(file,"BLOCKSIZE;CPU_TIME;GPU_CALCULATION;GPU_TOTAL\n");
+	fprintf(file, "BLOCKSIZE;CPU_TIME;GPU_CALCULATION;GPU_TOTAL\n");
 	while (BLOCKSIZE <= 1024) {
 		float cpuAvg = 0;
 		float gpuCalcAvg = 0;
@@ -137,17 +136,14 @@ int main(int argc, char **argv) {
 		cpuAvg = cpuAvg / COUNT;
 		gpuCalcAvg = gpuCalcAvg / COUNT;
 		gpuTotalAvg = gpuTotalAvg / COUNT;
-		fprintf(file,"%i;%f;%f;%f\n", BLOCKSIZE, cpuAvg, gpuCalcAvg, gpuTotalAvg);
+		fprintf(file, "%i;%f;%f;%f\n", BLOCKSIZE, cpuAvg, gpuCalcAvg, gpuTotalAvg);
 		printf("%i;%f;%f;%f\n", BLOCKSIZE, cpuAvg, gpuCalcAvg, gpuTotalAvg);
 		BLOCKSIZE++;
 	}
 
-	//encodeOneStep("grayscale.png");
-	free(r);
-	free(g);
-	free(b);
-	free(a);
+	encodeOneStep("grayscale.png");
 
+	free(out);
 	fclose(file);
 
 	return 0;
@@ -156,34 +152,27 @@ int main(int argc, char **argv) {
 ////////////////////////////////////////////////////////////////////////////////
 //! Run a simple test for CUDA
 ////////////////////////////////////////////////////////////////////////////////
-void runTest(int argc, char **argv, int index) {
+void runTest(int argc, char** argv, int index) {
 
-	unsigned int num_threads = 32;
-	unsigned int mem_size = sizeof(float) * num_threads;
+	int nBlocksHor = width / BLOCKSIZE + (width % BLOCKSIZE == 0 ? 0 : 1);
+	int nBlocksver = height;
 
 	// setup execution parameters
-	dim3 grid(1, 1, 1);
-	dim3 threads(num_threads, 1, 1);
+	dim3 grid(nBlocksHor, nBlocksver, 1);
 
 	unsigned int ARRAYSIZE = height * width;
 
-	//BLOCKSIZE en nBlocks
-	int nBlocks = ARRAYSIZE / BLOCKSIZE + (ARRAYSIZE % BLOCKSIZE == 0 ? 0 : 1);
 	//declare variables
-	unsigned char *r_host, *g_host, *b_host;
-	unsigned char *r_dev, *g_dev, *b_dev;
+	unsigned char* out_host;
+	unsigned char* r_dev, * g_dev, * b_dev, * out_dev;
 	//allocate arrays on host
-	r_host = (unsigned char *) malloc(ARRAYSIZE * sizeof(unsigned char));
-	g_host = (unsigned char *) malloc(ARRAYSIZE * sizeof(unsigned char));
-	b_host = (unsigned char *) malloc(ARRAYSIZE * sizeof(unsigned char));
+	out_host = (unsigned char*)malloc(ARRAYSIZE * sizeof(unsigned char));
 
 	for (unsigned int i = 0; i < ARRAYSIZE; i++) {
-		r_host[i] = r[i];
-		g_host[i] = g[i];
-		b_host[i] = b[i];
+		out_host[i] = 0;
 	}
 
-	StopWatchInterface *timerCPU = 0;
+	StopWatchInterface* timerCPU = 0;
 	cudaEvent_t startTotal, startCalc, stopTotal, stopCalc;
 	float timeTotal = 0;
 	float timeCalc = 0;
@@ -197,22 +186,25 @@ void runTest(int argc, char **argv, int index) {
 	cudaEventRecord(startTotal);
 
 	//allocate arrays on device
-	cudaMalloc((void **) &r_dev, ARRAYSIZE * sizeof(unsigned char));
-	cudaMalloc((void **) &g_dev, ARRAYSIZE * sizeof(unsigned char));
-	cudaMalloc((void **) &b_dev, ARRAYSIZE * sizeof(unsigned char));
+	cudaMalloc((void**)&r_dev, ARRAYSIZE * sizeof(unsigned char));
+	cudaMalloc((void**)&g_dev, ARRAYSIZE * sizeof(unsigned char));
+	cudaMalloc((void**)&b_dev, ARRAYSIZE * sizeof(unsigned char));
+	cudaMalloc((void**)&out_dev, ARRAYSIZE * sizeof(unsigned char));
 
 	//Step 1: Copy data to GPU memory
 
-	cudaMemcpy(r_dev, r_host, ARRAYSIZE * sizeof(unsigned char),
-			cudaMemcpyHostToDevice);
-	cudaMemcpy(g_dev, g_host, ARRAYSIZE * sizeof(unsigned char),
-			cudaMemcpyHostToDevice);
-	cudaMemcpy(b_dev, b_host, ARRAYSIZE * sizeof(unsigned char),
-			cudaMemcpyHostToDevice);
+	cudaMemcpy(r_dev, r, ARRAYSIZE * sizeof(unsigned char),
+		cudaMemcpyHostToDevice);
+	cudaMemcpy(g_dev, g, ARRAYSIZE * sizeof(unsigned char),
+		cudaMemcpyHostToDevice);
+	cudaMemcpy(b_dev, b, ARRAYSIZE * sizeof(unsigned char),
+		cudaMemcpyHostToDevice);
+	cudaMemcpy(out_dev, out_host, ARRAYSIZE * sizeof(unsigned char),
+		cudaMemcpyHostToDevice);
 
 	//Step 2 & 3: RUN
 	cudaEventRecord(startCalc);
-	testGrayScale<<< nBlocks, BLOCKSIZE >>> (r_dev,g_dev,b_dev,ARRAYSIZE);
+	testGrayScale << < grid, BLOCKSIZE >> > (r_dev, g_dev, b_dev, out_dev, ARRAYSIZE);
 	cudaEventRecord(stopCalc);
 	cudaEventSynchronize(stopCalc);
 
@@ -220,45 +212,38 @@ void runTest(int argc, char **argv, int index) {
 	getLastCudaError("Kernel execution failed");
 
 	//Step 4: Retrieve result
-	cudaMemcpy(r_host, r_dev, ARRAYSIZE * sizeof(unsigned char),
-			cudaMemcpyDeviceToHost);
-	cudaMemcpy(g_host, g_dev, ARRAYSIZE * sizeof(unsigned char),
-			cudaMemcpyDeviceToHost);
-	cudaMemcpy(b_host, b_dev, ARRAYSIZE * sizeof(unsigned char),
-			cudaMemcpyDeviceToHost);
+	cudaMemcpy(out_host, out_dev, ARRAYSIZE * sizeof(unsigned char),
+		cudaMemcpyDeviceToHost);
 
 	cudaEventRecord(stopTotal);
 	cudaEventSynchronize(stopTotal);
 	cudaEventElapsedTime(&timeCalc, startCalc, stopCalc);
 	cudaEventElapsedTime(&timeTotal, startTotal, stopTotal);
 
-	for (unsigned int i = 0; i < ARRAYSIZE; i++) {
-		r_host[i] = r[i];
-		g_host[i] = g[i];
-	 	b_host[i] = b[i];
-	}
-
 	//printf("Starting CPU...\n");
 
 	sdkStartTimer(&timerCPU);
 
-	computeGrayScale(r_host,g_host,b_host,ARRAYSIZE);
+	computeGrayScale(r, g, b, out_host, ARRAYSIZE);
 
 	sdkStopTimer(&timerCPU);
+
+	for (unsigned int i = 0; i < ARRAYSIZE; i++) {
+		out[i] = out_host[i];
+	}
 
 	// RESULTS
 	cpuResults[index] = sdkGetTimerValue(&timerCPU);
 	gpuCalcResults[index] = timeCalc;
 	gpuTotalResults[index] = timeTotal;
 
-//rest of program (Other 4 steps go here)
-//end of  program
-//cleanup: VERY IMPORTANT!!!
+	//rest of program (Other 4 steps go here)
+	//end of  program
+	//cleanup: VERY IMPORTANT!!!
 	sdkDeleteTimer(&timerCPU);
-	free(r_host);
-	free(g_host);
-	free(b_host);
+	free(out_host);
 	cudaFree(r_dev);
 	cudaFree(g_dev);
 	cudaFree(b_dev);
+	cudaFree(out_dev);
 }
