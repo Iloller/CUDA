@@ -34,7 +34,7 @@
 // declaration, forward
 void runTest(int argc, char** argv, int index);
 
-#define COUNT 10
+#define COUNT 1
 int BLOCKSIZE = 1;
 
 extern "C" void computeGrayScale(unsigned char* r, unsigned char* g, unsigned char* b, unsigned int ARRAYSIZE);
@@ -125,7 +125,7 @@ void decodeOneStep(const char* filename) {
 }
 
 int main(int argc, char** argv) {
-	const char* filename = argc > 1 ? argv[1] : "image.png";
+	const char* filename = argc > 1 ? argv[1] : "original.png";
 
 	decodeOneStep(filename);
 

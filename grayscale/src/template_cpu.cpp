@@ -18,8 +18,9 @@ void computeGrayScale(unsigned char *r, unsigned char *g, unsigned char *b, unsi
 	for (unsigned int i = 0; i < ARRAYSIZE; i++)
 	{
 		/*get RGBA components*/
-		float tmp = 0.2126 * r[i] / 255 + 0.7152 * g[i] / 255 + 0.0722 * b[i] / 255;
-		out[i] = 255 * tmp;
+		//float tmp = 0.2126 * r[i] / 255 + 0.7152 * g[i] / 255 + 0.0722 * b[i] / 255;
+		//out[i] = 255 * tmp;
+        out[i] = 0.2126 * r[i] + 0.7152 * g[i] + 0.0722 * b[i];
 	}
 }
 
